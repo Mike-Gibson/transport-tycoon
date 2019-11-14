@@ -1,0 +1,24 @@
+{
+  "name": "transport-tycoon",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mike-Gibson/transport-tycoon.git"
+  },
+  "author": "Mike Gibson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mike-Gibson/transport-tycoon/issues"
+  },
+  "homepage": "https://github.com/Mike-Gibson/transport-tycoon#readme",
+  "devDependencies": {
+    "ts-node": "^8.5.0",
+    "typescript": "^3.7.2"
+  }
+}
