@@ -4,7 +4,7 @@ import { calculateHours } from './core';
 const containerDestinationString = argv.containerDestinations as unknown as string;
 
 if (!containerDestinationString) {
-  console.error('Must provide --containerDestinations command line argument');
+  throw new Error('Must provide --containerDestinations command line argument');
 }
 
 const containerDestinations = containerDestinationString.split('');
