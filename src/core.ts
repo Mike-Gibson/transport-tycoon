@@ -22,16 +22,19 @@ export function calculateHours(containerDestinations: string[]) {
 
   let currentTrips: Trip[] = [];
 
+  const log = (message: string) => console.log(` ${totalHours.toString().padStart(2, '0')}: ${message}`);
+
   while (true) {
     let truckOneTrip = currentTrips.find(t => t.transporter === truckOne);
     let truckTwoTrip = currentTrips.find(t => t.transporter === truckTwo);
-    let shipTrip = currentTrips.find(t => t.transporter === truckOne);
+    let shipTrip = currentTrips.find(t => t.transporter === ship);
 
     if (!truckOneTrip) {
-      console.log('Truck one has no trip');
+      log('Truck one has no trip');
       // assume at factory?
       if (factory.containers.length) {
-        const nextContainer = factory.containers.pop()!;
+        const nextContainer = factory.containers.shift()!;
+        truckOne.setContainer(nextContainer);
 
         if (nextContainer.destination === 'B') {
           truckOneTrip = new Trip(factoryBRoute, truckOne);
@@ -40,17 +43,18 @@ export function calculateHours(containerDestinations: string[]) {
           truckOneTrip = new Trip(factoryPortRoute, truckOne);
         }
 
-        console.log(`Truck one picked up container from factory with destination ${nextContainer.destination}`);
+        log(`Truck one picked up container from factory with destination ${nextContainer.destination}`);
 
         currentTrips.push(truckOneTrip);
       }
     }
 
     if (!truckTwoTrip) {
-      console.log('Truck two has no trip');
+      log('Truck two has no trip');
       // assume at factory?
       if (factory.containers.length) {
-        const nextContainer = factory.containers.pop()!;
+        const nextContainer = factory.containers.shift()!;
+        truckTwo.setContainer(nextContainer);
 
         if (nextContainer.destination === 'B') {
           truckTwoTrip = new Trip(factoryBRoute, truckTwo);
@@ -59,24 +63,25 @@ export function calculateHours(containerDestinations: string[]) {
           truckTwoTrip = new Trip(factoryPortRoute, truckTwo);
         }
 
-        console.log(`Truck two picked up container from factory with destination ${nextContainer.destination}`);
+        log(`Truck two picked up container from factory with destination ${nextContainer.destination}`);
 
         currentTrips.push(truckTwoTrip);
       }
     }
 
     if (!shipTrip) {
-      console.log('Ship has no trip');
+      log('Ship has no trip');
       // assume at port?
       if (port.containers.length) {
-        const nextContainer = port.containers.pop()!;
+        const nextContainer = port.containers.shift()!;
+        ship.setContainer(nextContainer);
 
-        if (nextContainer.destination !== 'B') {
+        if (nextContainer.destination !== 'A') {
           // Error
           throw new Error('Wrong destination');
         }
 
-        console.log(`Ship picked up container from port with destination ${nextContainer.destination}`);
+        log(`Ship picked up container from port with destination ${nextContainer.destination}`);
 
         shipTrip = new Trip(portARoute, ship)
         currentTrips.push(shipTrip);
@@ -89,15 +94,15 @@ export function calculateHours(containerDestinations: string[]) {
     shipTrip && shipTrip.advanceHour();
 
     if (truckOneTrip && truckOneTrip.isComplete) {
-        console.log(`Truck one trip to ${truckOneTrip.route.end} is complete`);
+        log(`Truck one trip to ${truckOneTrip.route.end} is complete`);
       if (truckOne.container !== null) {
-        console.log(`Truck one dropped off container with destination ${truckOne.container.destination}`);
+        log(`Truck one dropped off container with destination ${truckOne.container.destination}`);
         truckOneTrip.route.end.addContainer(truckOne.container);
         truckOne.container = null;
       }
 
       if (truckOneTrip.route.end !== factory) {
-        console.log(`Truck one returning to ${truckOneTrip.route.end}`);
+        log(`Truck one returning to ${truckOneTrip.route.start}`);
         currentTrips.push(truckOneTrip.reverse());
       }
 
@@ -105,15 +110,15 @@ export function calculateHours(containerDestinations: string[]) {
     }
 
     if (truckTwoTrip && truckTwoTrip.isComplete) {
-      console.log(`Truck two trip to ${truckTwoTrip.route.end} is complete`);
+      log(`Truck two trip to ${truckTwoTrip.route.end} is complete`);
       if (truckTwo.container !== null) {
-        console.log(`Truck two dropped off container with destination ${truckTwo.container.destination}`);
+        log(`Truck two dropped off container with destination ${truckTwo.container.destination}`);
         truckTwoTrip.route.end.addContainer(truckTwo.container);
         truckTwo.container = null;
       }
 
       if (truckTwoTrip.route.end !== factory) {
-        console.log(`Truck two returning to ${truckTwoTrip.route.end}`);
+        log(`Truck two returning to ${truckTwoTrip.route.start}`);
         currentTrips.push(truckTwoTrip.reverse());
       }
 
@@ -121,15 +126,15 @@ export function calculateHours(containerDestinations: string[]) {
     }
 
     if (shipTrip && shipTrip.isComplete) {
-      console.log(`Ship trip to ${shipTrip.route.end} is complete`);
+      log(`Ship trip to ${shipTrip.route.end} is complete`);
       if (ship.container !== null) {
-        console.log(`Ship dropped off container with destination ${ship.container.destination}`);
+        log(`Ship dropped off container with destination ${ship.container.destination}`);
         shipTrip.route.end.addContainer(ship.container);
         ship.container = null;
       }
 
       if (shipTrip.route.end !== port) {
-        console.log(`Ship returning to ${shipTrip.route.end}`);
+        log(`Ship returning to ${shipTrip.route.start}`);
         currentTrips.push(shipTrip.reverse());
       }
 
@@ -137,9 +142,19 @@ export function calculateHours(containerDestinations: string[]) {
     }
 
     const allDelivered = containers.every(c => warehouseA.containers.includes(c) || warehouseB.containers.includes(c));
-    console.log(`All delivered: ${allDelivered}`);
+
+    log('Status:');
+    log(` Containers at A:    ${warehouseA.containers.length}`);
+    log(` Containers at B:    ${warehouseA.containers.length}`);
+    log(` Containers at Port: ${warehouseA.containers.length}`);
+    log(` All delivered:      ${allDelivered ? 'Yes' : 'No'}`);
 
     if (allDelivered) {
+      break;
+    }
+
+    if (totalHours > 100) {
+      log('Error: Possible Timeout?');
       break;
     }
   }
