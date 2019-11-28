@@ -18,7 +18,12 @@
   },
   "homepage": "https://github.com/Mike-Gibson/transport-tycoon#readme",
   "devDependencies": {
+    "@types/node": "^12.12.7",
+    "@types/yargs": "^13.0.3",
     "ts-node": "^8.5.0",
     "typescript": "^3.7.2"
+  },
+  "dependencies": {
+    "yargs": "^14.2.0"
   }
 }
