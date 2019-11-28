@@ -1,4 +1,24 @@
-export function calculateHours(containerDestinations: string[]) {
+enum EventType {
+  Arrive = 'ARRIVE',
+  Depart = 'DEPART',
+}
+
+enum TransportKind {
+  Truck = 'TRUCK',
+  Ship = 'SHIP',
+}
+
+type LogEntry = {
+  event: EventType,
+  time: number,
+  transport_id: number,
+  kind: TransportKind,
+  location: string,
+  destination: string,
+  cargo: { cargo_id: number, destination: string, origin: string }[],
+}
+
+export function calculateHours(containerDestinations: string[], debug: boolean = false, noEvents: boolean = false) {
   containerDestinations.forEach(containerDestination => {
     if (containerDestination !== 'A' && containerDestination !== 'B') {
       throw new Error('Container destination must be either A or B');
@@ -7,14 +27,14 @@ export function calculateHours(containerDestinations: string[]) {
 
   let totalHours = 0;
 
-  const containers = containerDestinations.map(c => new Container(c));
+  const containers = containerDestinations.map((c, index) => new Container(index, c));
   const factory = new Factory(containers);
-  const port = new Port('Port');
-  const warehouseA = new Warehouse('Warehouse A');
-  const warehouseB = new Warehouse('Warehouse B');
-  const truckOne = new Truck();
-  const truckTwo = new Truck();
-  const ship = new Ship();
+  const port = new Port('PORT');
+  const warehouseA = new Warehouse('A');
+  const warehouseB = new Warehouse('B');
+  const truckOne = new Truck(0);
+  const truckTwo = new Truck(1);
+  const ship = new Ship(2);
 
   const factoryBRoute = new Route(factory, warehouseB, 5);
   const factoryPortRoute = new Route(factory, port, 1);
@@ -22,7 +42,31 @@ export function calculateHours(containerDestinations: string[]) {
 
   let currentTrips: Trip[] = [];
 
-  const log = (message: string) => console.log(` ${totalHours.toString().padStart(2, '0')}: ${message}`);
+  const logDebug = (message: string) => debug && console.log(` ${totalHours.toString().padStart(2, '0')}: ${message}`);
+  const logEvent = (event: EventType, trip: Trip) => {
+    if (noEvents) {
+      return;
+    }
+
+    const from = event === EventType.Depart ? trip.route.start : trip.route.end;
+    const to = event === EventType.Depart ? trip.route.end : trip.route.start;
+    const container = trip.transporter.container;
+    const cargo = container === null
+      ? []
+      : [{ cargo_id: container.id, destination: container.destination, origin: factory.toString() }]; // TODO: Hard coded origin
+
+    const entry: LogEntry = {
+      event: event,
+      time: totalHours,
+      transport_id: trip.transporter.id,
+      kind: trip.transporter.kind,
+      location: from.toString(),
+      destination: to.toString(),
+      cargo: cargo,
+    };
+
+    console.log(JSON.stringify(entry));
+  };
 
   while (true) {
     let truckOneTrip = currentTrips.find(t => t.transporter === truckOne);
@@ -30,7 +74,7 @@ export function calculateHours(containerDestinations: string[]) {
     let shipTrip = currentTrips.find(t => t.transporter === ship);
 
     if (!truckOneTrip) {
-      log('Truck one has no trip');
+      logDebug('Truck one has no trip');
       // assume at factory?
       if (factory.containers.length) {
         const nextContainer = factory.containers.shift()!;
@@ -43,14 +87,15 @@ export function calculateHours(containerDestinations: string[]) {
           truckOneTrip = new Trip(factoryPortRoute, truckOne);
         }
 
-        log(`Truck one picked up container from factory with destination ${nextContainer.destination}`);
+        logDebug(`Truck one picked up container from factory with destination ${nextContainer.destination}`);
+        logEvent(EventType.Depart, truckOneTrip);
 
         currentTrips.push(truckOneTrip);
       }
     }
 
     if (!truckTwoTrip) {
-      log('Truck two has no trip');
+      logDebug('Truck two has no trip');
       // assume at factory?
       if (factory.containers.length) {
         const nextContainer = factory.containers.shift()!;
@@ -63,14 +108,15 @@ export function calculateHours(containerDestinations: string[]) {
           truckTwoTrip = new Trip(factoryPortRoute, truckTwo);
         }
 
-        log(`Truck two picked up container from factory with destination ${nextContainer.destination}`);
+        logDebug(`Truck two picked up container from factory with destination ${nextContainer.destination}`);
+        logEvent(EventType.Depart, truckTwoTrip);
 
         currentTrips.push(truckTwoTrip);
       }
     }
 
     if (!shipTrip) {
-      log('Ship has no trip');
+      logDebug('Ship has no trip');
       // assume at port?
       if (port.containers.length) {
         const nextContainer = port.containers.shift()!;
@@ -81,9 +127,11 @@ export function calculateHours(containerDestinations: string[]) {
           throw new Error('Wrong destination');
         }
 
-        log(`Ship picked up container from port with destination ${nextContainer.destination}`);
-
         shipTrip = new Trip(portARoute, ship)
+
+        logDebug(`Ship picked up container from port with destination ${nextContainer.destination}`);
+        logEvent(EventType.Depart, shipTrip);
+
         currentTrips.push(shipTrip);
       }
     }
@@ -94,48 +142,60 @@ export function calculateHours(containerDestinations: string[]) {
     shipTrip && shipTrip.advanceHour();
 
     if (truckOneTrip && truckOneTrip.isComplete) {
-        log(`Truck one trip to ${truckOneTrip.route.end} is complete`);
+      logDebug(`Truck one trip to ${truckOneTrip.route.end} is complete`);
+      logEvent(EventType.Arrive, truckOneTrip);
+
       if (truckOne.container !== null) {
-        log(`Truck one dropped off container with destination ${truckOne.container.destination}`);
+        logDebug(`Truck one dropped off container with destination ${truckOne.container.destination}`);
         truckOneTrip.route.end.addContainer(truckOne.container);
         truckOne.container = null;
       }
 
       if (truckOneTrip.route.end !== factory) {
-        log(`Truck one returning to ${truckOneTrip.route.start}`);
-        currentTrips.push(truckOneTrip.reverse());
+        logDebug(`Truck one returning to ${truckOneTrip.route.start}`);
+        const returnTrip = truckOneTrip.reverse();
+        logEvent(EventType.Depart, returnTrip);
+        currentTrips.push(returnTrip);
       }
 
       currentTrips = currentTrips.filter(t => t !== truckOneTrip);
     }
 
     if (truckTwoTrip && truckTwoTrip.isComplete) {
-      log(`Truck two trip to ${truckTwoTrip.route.end} is complete`);
+      logDebug(`Truck two trip to ${truckTwoTrip.route.end} is complete`);
+      logEvent(EventType.Arrive, truckTwoTrip);
+      
       if (truckTwo.container !== null) {
-        log(`Truck two dropped off container with destination ${truckTwo.container.destination}`);
+        logDebug(`Truck two dropped off container with destination ${truckTwo.container.destination}`);
         truckTwoTrip.route.end.addContainer(truckTwo.container);
         truckTwo.container = null;
       }
 
       if (truckTwoTrip.route.end !== factory) {
-        log(`Truck two returning to ${truckTwoTrip.route.start}`);
-        currentTrips.push(truckTwoTrip.reverse());
+        logDebug(`Truck two returning to ${truckTwoTrip.route.start}`);
+        const returnTrip = truckTwoTrip.reverse();
+        logEvent(EventType.Depart, returnTrip);
+        currentTrips.push(returnTrip);
       }
 
       currentTrips = currentTrips.filter(t => t !== truckTwoTrip);
     }
 
     if (shipTrip && shipTrip.isComplete) {
-      log(`Ship trip to ${shipTrip.route.end} is complete`);
+      logDebug(`Ship trip to ${shipTrip.route.end} is complete`);
+      logEvent(EventType.Arrive, shipTrip);
+
       if (ship.container !== null) {
-        log(`Ship dropped off container with destination ${ship.container.destination}`);
+        logDebug(`Ship dropped off container with destination ${ship.container.destination}`);
         shipTrip.route.end.addContainer(ship.container);
         ship.container = null;
       }
 
       if (shipTrip.route.end !== port) {
-        log(`Ship returning to ${shipTrip.route.start}`);
-        currentTrips.push(shipTrip.reverse());
+        logDebug(`Ship returning to ${shipTrip.route.start}`);
+        const returnTrip = shipTrip.reverse();
+        logEvent(EventType.Depart, returnTrip);
+        currentTrips.push(returnTrip);
       }
 
       currentTrips = currentTrips.filter(t => t !== shipTrip);
@@ -143,18 +203,18 @@ export function calculateHours(containerDestinations: string[]) {
 
     const allDelivered = containers.every(c => warehouseA.containers.includes(c) || warehouseB.containers.includes(c));
 
-    log('Status:');
-    log(` Containers at A:    ${warehouseA.containers.length}`);
-    log(` Containers at B:    ${warehouseA.containers.length}`);
-    log(` Containers at Port: ${warehouseA.containers.length}`);
-    log(` All delivered:      ${allDelivered ? 'Yes' : 'No'}`);
+    logDebug('Status:');
+    logDebug(` Containers at A:    ${warehouseA.containers.length}`);
+    logDebug(` Containers at B:    ${warehouseA.containers.length}`);
+    logDebug(` Containers at Port: ${warehouseA.containers.length}`);
+    logDebug(` All delivered:      ${allDelivered ? 'Yes' : 'No'}`);
 
     if (allDelivered) {
       break;
     }
 
     if (totalHours > 100) {
-      log('Error: Possible Timeout?');
+      console.error('Error: Possible Timeout?');
       break;
     }
   }
@@ -163,7 +223,10 @@ export function calculateHours(containerDestinations: string[]) {
 }
 
 class Container {
-  constructor(public destination: string) {
+  readonly id: number;
+
+  constructor(id: number, public destination: string) {
+    this.id = id;
   }
 
   toString() {
@@ -174,7 +237,7 @@ class Container {
 abstract class ContainerStore {
   containers: Container[] = [];
 
-  constructor(private name: string) {}
+  constructor(private name: string) { }
 
   addContainer(container: Container) {
     this.containers.push(container);
@@ -187,7 +250,7 @@ abstract class ContainerStore {
 
 class Factory extends ContainerStore {
   constructor(public containers: Container[]) {
-    super('Factory');
+    super('FACTORY');
     this.containers = [...containers];
   }
 }
@@ -201,7 +264,14 @@ class Port extends ContainerStore {
 }
 
 abstract class Transporter {
+  public readonly id: number;
+  public readonly kind: TransportKind;
   public container: Container | null = null;
+
+  constructor(id: number, kind: TransportKind) {
+    this.id = id;
+    this.kind = kind;
+  }
 
   setContainer(container: Container) {
     if (this.container) {
@@ -212,8 +282,17 @@ abstract class Transporter {
   }
 }
 
-class Truck extends Transporter { }
-class Ship extends Transporter { }
+class Truck extends Transporter {
+  constructor(id: number) {
+    super(id, TransportKind.Truck);
+  }
+}
+
+class Ship extends Transporter {
+  constructor(id: number) {
+    super(id, TransportKind.Ship);
+  }
+}
 
 
 class Route {
